@@ -3,18 +3,53 @@ package org.cdsframework.cds.servlet;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import org.hl7.fhir.exceptions.FHIRException;
+import org.hl7.fhir.r4.model.DateType;
+import org.hl7.fhir.r4.model.Enumerations.AdministrativeGender;
+import org.hl7.fhir.r4.model.Immunization;
+import org.hl7.fhir.r4.model.Parameters;
+import org.hl7.fhir.r4.model.Patient;
 import org.tch.fc.model.Service;
 import org.tch.fc.model.Software;
+import org.tch.fc.model.SoftwareResult;
+import ca.uhn.fhir.context.FhirContext;
+import ca.uhn.fhir.model.primitive.IdDt;
+import ca.uhn.fhir.rest.client.api.IGenericClient;
+import ca.uhn.fhir.rest.client.interceptor.LoggingInterceptor;
 
 public class MonitorServlet extends HttpServlet {
 
   private static StringBuffer log = new StringBuffer();
   private static Software software = null;
+  private static Throwable exceptionServer = null;
+  private static Throwable exceptionClient = null;
+  private static SoftwareResult softwareResult = null;
+
+  public static Throwable getException() {
+    return exceptionServer;
+  }
+
+
+  public static void setException(Throwable exception) {
+    MonitorServlet.exceptionServer = exception;
+  }
+
+
+  public static SoftwareResult getSoftwareResult() {
+    return softwareResult;
+  }
+
+
+  public static void setSoftwareResult(SoftwareResult softwareResult) {
+    MonitorServlet.softwareResult = softwareResult;
+  }
+
 
   public static Software getSoftware() {
     return software;
@@ -27,6 +62,7 @@ public class MonitorServlet extends HttpServlet {
   private static final String PARAM_PASSWORD = "password";
   private static final String PARAM_ACTION = "action";
   private static final String ACTION_SAVE = "Save";
+  private static final String ACTION_TEST = "Test";
 
   public static void logStatus(String s) {
     SimpleDateFormat sdf = new SimpleDateFormat("MM/dd/yyyy HH:mm:ss zz");
@@ -66,6 +102,13 @@ public class MonitorServlet extends HttpServlet {
         software.setServiceFacilityid(facilityid);
         software.setServicePassword(password);
         logStatus("Update connection to: " + url);
+      } else if (action.equals(ACTION_TEST)) {
+        exceptionClient = null;
+        try {
+          testSend();
+        } catch (FHIRException e) {
+          exceptionClient = e;
+        }
       }
     }
     resp.setContentType("text/html");
@@ -114,13 +157,56 @@ public class MonitorServlet extends HttpServlet {
     out.println("      <tr>");
     out.println("        <td colspan=\"2\" align=\"right\"><input type=\"submit\" name=\""
         + PARAM_ACTION + "\" value=\"" + ACTION_SAVE + "\"/></td>");
+    out.println("        <td colspan=\"2\" align=\"right\"><input type=\"submit\" name=\""
+        + PARAM_ACTION + "\" value=\"" + ACTION_TEST + "\"/></td>");
     out.println("      </tr>");
     out.println("    </table>");
     out.println("    </form>");
+    if (exceptionClient != null) {
+      out.println("    <h2>Client Exception</h2>");
+      out.println("    <pre>");
+      exceptionClient.printStackTrace(out);
+      out.println("</pre>");
+    }
+    if (exceptionServer != null) {
+      out.println("    <h2>Server Exception</h2>");
+      out.println("    <pre>");
+      exceptionServer.printStackTrace(out);
+      out.println("</pre>");
+    }
     out.println("    <h2>Monitor</h2>");
     out.println("    <pre>" + log + "</pre>");
     out.println("  </body>");
     out.println("</html>");
     out.flush();
+  }
+
+  public static void main(String[] args) throws Exception {
+    testSend();
+  }
+
+  private static void testSend() throws FHIRException {
+    FhirContext ctx = FhirContext.forR4();
+    IGenericClient client = ctx.newRestfulGenericClient(
+        "http://immdev.pagekite.me/cds-immunization-forecast-rest-server/fhir/");
+    client.registerInterceptor(new LoggingInterceptor(true));
+
+    Patient patient = new Patient();
+    patient.setBirthDate(new Date());
+    patient.setGender(AdministrativeGender.fromCode("male"));
+    // Create the input parameters to pass to the server
+    Parameters inParams = new Parameters();
+    inParams.addParameter().setName("assessmentDate").setValue(new DateType());
+    inParams.addParameter().setName("patient").setResource(patient);
+
+
+    //        
+    //      @OperationParam(name = "immunization", min = 0,
+    //          max = OperationParam.MAX_UNLIMITED) List<Immunization> immunizationList,
+    //      @OperationParam(name = "observation", min = 0,
+    //          max = OperationParam.MAX_UNLIMITED) List<Observation> observationList, RequestDetails requestDetails) {
+
+    Parameters outParams = client.operation().onServer().named("$cds-immunization-forcast")
+        .withParameters(inParams).execute();
   }
 }

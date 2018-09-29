@@ -7,8 +7,6 @@ import javax.ws.rs.client.Invocation;
 import javax.ws.rs.core.MediaType;
 import org.cdsframework.cds.servlet.MonitorServlet;
 import org.hl7.fhir.r4.model.DateType;
-import org.hl7.fhir.r4.model.Enumeration;
-import org.hl7.fhir.r4.model.Enumerations;
 import org.hl7.fhir.r4.model.Immunization;
 import org.hl7.fhir.r4.model.ImmunizationEvaluation;
 import org.hl7.fhir.r4.model.ImmunizationRecommendation;
@@ -16,10 +14,17 @@ import org.hl7.fhir.r4.model.Observation;
 import org.hl7.fhir.r4.model.Parameters;
 import org.hl7.fhir.r4.model.Parameters.ParametersParameterComponent;
 import org.hl7.fhir.r4.model.Patient;
-import org.opencds.vmr.v1_0.schema.CDSInput;
-import org.opencds.vmr.v1_0.schema.CDSOutput;
+import org.tch.fc.ConnectFactory;
+import org.tch.fc.ConnectorInterface;
+import org.tch.fc.model.ForecastActual;
+import org.tch.fc.model.Software;
+import org.tch.fc.model.SoftwareResult;
+import org.tch.fc.model.TestCase;
+import org.tch.fc.model.TestEvent;
+import org.tch.fc.model.VaccineGroup;
 import ca.uhn.fhir.rest.annotation.Operation;
 import ca.uhn.fhir.rest.annotation.OperationParam;
+import ca.uhn.fhir.rest.api.server.RequestDetails;
 
 /**
  * This is a resource provider which stores Patient resources in memory using a
@@ -35,9 +40,8 @@ public class CdsImmunizationForecastProvider {
   private static final Invocation.Builder FHIR_REQUEST =
       ClientBuilder.newClient().target("http://baseconverterservice" + "/path1" + "/path2")
           .request(MediaType.APPLICATION_XML);
-  
-  static
-  {
+
+  static {
     MonitorServlet.logStatus("Initializing FHIR end point");
   }
 
@@ -47,49 +51,75 @@ public class CdsImmunizationForecastProvider {
    * @param assessmentDate
    * @param gender
    * @param birthDate
-   * @param immunization
+   * @param immunizationList
    * @return an Parameters object with recommendation and evaluations
    */
   @Operation(name = "/$cds-immunization-forcast", idempotent = true)
   public Parameters postParameters(@OperationParam(name = "assessmentDate") DateType assessmentDate,
       @OperationParam(name = "patient") Patient patient,
       @OperationParam(name = "immunization", min = 0,
-          max = OperationParam.MAX_UNLIMITED) List<Immunization> immunization,
+          max = OperationParam.MAX_UNLIMITED) List<Immunization> immunizationList,
       @OperationParam(name = "observation", min = 0,
-          max = OperationParam.MAX_UNLIMITED) List<Observation> observation) {
+          max = OperationParam.MAX_UNLIMITED) List<Observation> observationList, RequestDetails requestDetails) {
 
     MonitorServlet.logStatus("Calling cds-immunization-forcast");
-    CDSInput cdsInput =
-        getCdsInput(patient.getGenderElement(), patient.getBirthDateElement(), immunization);
-    CDSOutput cdsOutput = getCdsOutput(cdsInput, assessmentDate);
-    Parameters parameters = getParametersOut(cdsOutput, immunization);
 
-    return parameters;
-  }
+    TestCase testCase = new TestCase();
+    SoftwareResult softwareResult = new SoftwareResult();
+    Software software = MonitorServlet.getSoftware();
+    MonitorServlet.setException(null);
+    MonitorServlet.setSoftwareResult(null);
+    ImmunizationRecommendation immunizationRecommendation = new ImmunizationRecommendation();
+    List<ImmunizationEvaluation> immunizationEvaluations = new ArrayList<>();
 
-  private CDSInput getCdsInput(Enumeration<Enumerations.AdministrativeGender> gender,
-      DateType birthDate, List<Immunization> immunization) {
-    return null;
-  }
+    {
+      // setup test case for running
+      testCase.setEvalDate(assessmentDate.getValue());
+      testCase.setPatientDob(patient.getBirthDate());
+      testCase.setPatientSex(patient.getGender().getDisplay().startsWith("M") ? "M" : "F");
+      List<TestEvent> testEventList = new ArrayList<TestEvent>();
+      for (Immunization immunization : immunizationList) {
+        try {
+          int cvx = Integer.parseInt(immunization.getVaccineCode().getCodingFirstRep().getCode());
+          TestEvent testEvent = new TestEvent(cvx, immunization.getDate());
+          testEventList.add(testEvent);
+        } catch (NumberFormatException nfe) {
+          // ignore vaccine
+        }
+      }
+      testCase.setTestEventList(testEventList);
+    }
+    List<ForecastActual> forecastActualList = null;
+    if (software == null) {
+      MonitorServlet.logStatus("Can't process request, no service is setup");
+    } else {
+      try {
+        ConnectorInterface connector =
+            ConnectFactory.createConnecter(software, VaccineGroup.getForecastItemList());
+        connector.setLogText(true);
+        forecastActualList = connector.queryForForecast(testCase, new SoftwareResult());
+      } catch (Exception e) {
+        MonitorServlet.setException(e);
+      }
+    }
+    MonitorServlet.setSoftwareResult(softwareResult);
+    if (forecastActualList != null) {
+      for (ForecastActual forecastActual : forecastActualList) {
+        
+      }
+    }
 
-  private CDSOutput getCdsOutput(CDSInput cdsInput, DateType assessmentDate) {
-    return null;
-  }
 
-  private Parameters getParametersOut(CDSOutput cdsOutput, List<Immunization> immunization) {
+
     Parameters parameters = new Parameters();
 
     // recommendations
-    ImmunizationRecommendation immunizationRecommendation =
-        getImmunizationRecommendation(cdsOutput);
     ParametersParameterComponent component = new Parameters.ParametersParameterComponent();
     component.setName("recommendation");
     component.setResource(immunizationRecommendation);
     parameters.addParameter(component);
 
     // evaluations
-    List<ImmunizationEvaluation> immunizationEvaluations =
-        getImmunizationEvaluations(cdsOutput, immunization);
     for (ImmunizationEvaluation ie : immunizationEvaluations) {
       component = new Parameters.ParametersParameterComponent();
       component.setName("evaluation");
@@ -97,17 +127,11 @@ public class CdsImmunizationForecastProvider {
       parameters.addParameter(component);
     }
 
+
+
     return parameters;
   }
 
-  private ImmunizationRecommendation getImmunizationRecommendation(CDSOutput cdsOutput) {
-    ImmunizationRecommendation immunizationRecommendation = new ImmunizationRecommendation();
-    return immunizationRecommendation;
-  }
 
-  private List<ImmunizationEvaluation> getImmunizationEvaluations(CDSOutput cdsOutput,
-      List<Immunization> immunization) {
-    List<ImmunizationEvaluation> immunizationEvaluations = new ArrayList<>();
-    return immunizationEvaluations;
-  }
+
 }

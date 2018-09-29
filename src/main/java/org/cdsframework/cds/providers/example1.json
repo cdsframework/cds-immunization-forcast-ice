@@ -1,0 +1,18 @@
+{
+  "resourceType" : "Parameters",
+  "parameter" : [
+  	{ 
+      "name" : "assessmentDate", 
+      "valueDate" : "2018-09-30"
+  	},
+    { 
+      "name" : "patient", 
+      "resource" : { 
+      	"resourceType": "Patient",
+        "id": "123998899",
+        "gender": "male",
+        "birthDate": "1974-12-25"
+       }
+    }
+  ]
+}

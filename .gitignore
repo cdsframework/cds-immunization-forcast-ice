@@ -14,3 +14,6 @@ buildNumber.properties
 nb-configuration\.xml
 
 src/main/webapp/WEB-INF/glassfish-web\.xml
+.settings/
+.classpath
+.project

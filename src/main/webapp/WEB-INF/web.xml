@@ -8,9 +8,18 @@
         <servlet-class>org.cdsframework.cds.servlet.CdsImmunizationForecasterServlet</servlet-class>
         <load-on-startup>1</load-on-startup>
     </servlet>
+    <servlet>
+        <servlet-name>monitorServlet</servlet-name>
+        <servlet-class>org.cdsframework.cds.servlet.MonitorServlet</servlet-class>
+        <load-on-startup>1</load-on-startup>
+    </servlet>
     <servlet-mapping>
         <servlet-name>fhirServlet</servlet-name>
         <url-pattern>/fhir/*</url-pattern>
+    </servlet-mapping>
+    <servlet-mapping>
+        <servlet-name>monitorServlet</servlet-name>
+        <url-pattern>/monitor</url-pattern>
     </servlet-mapping>
     <!-- 
 	This filters provide support for Cross Origin Resource Sharing (CORS). You 

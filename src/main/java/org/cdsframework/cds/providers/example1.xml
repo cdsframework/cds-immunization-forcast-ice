@@ -1,0 +1,21 @@
+<Parameters xmlns="http://hl7.org/fhir">
+  <parameter>
+    <name value="assessmentDate"/>
+    <valueDate>2018-10-28</valueDate>
+  </parameter>
+  <parameter>
+    <name value="patient"/>  
+    <resource>
+      <Patient>
+        <id value="2018077577"/> 
+        <!--    use FHIR code system for male / female    -->
+        <gender value="male"/> 
+        <birthDate value="1974-12-25">
+          <extension url="http://hl7.org/fhir/StructureDefinition/patient-birthTime">
+            <valueDateTime value="1974-12-25T14:35:45-05:00"/> 
+          </extension> 
+        </birthDate> 
+      </Patient> 
+    </resource>
+  </parameter>
+</Parameters>

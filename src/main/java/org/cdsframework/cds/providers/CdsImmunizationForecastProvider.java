@@ -35,6 +35,11 @@ public class CdsImmunizationForecastProvider {
   private static final Invocation.Builder FHIR_REQUEST =
       ClientBuilder.newClient().target("http://baseconverterservice" + "/path1" + "/path2")
           .request(MediaType.APPLICATION_XML);
+  
+  static
+  {
+    MonitorServlet.logStatus("Initializing FHIR end point");
+  }
 
   /**
    * POST method for creating an instance of CdsImmunizationForecastProvider
